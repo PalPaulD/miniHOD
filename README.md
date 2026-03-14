@@ -1,6 +1,6 @@
 # miniHOD
 
-A minimal HOD code with, written in C, called from Python.
+A minimal HOD code, written in C, called from Python.
 About 7-8× faster than halotools on a single thread; scales further with OpenMP.
 
 ![benchmark](docs/benchmark.png)
@@ -53,11 +53,11 @@ n = model.mean_number_density(logMmin=12.5, sigma_logM=0.5, fmax=1.0,
 
 Standard Zheng+07 plus $f_\mathrm{max}$, which caps the central occupation below 1.
 This is the single most useful extension for samples that don't saturate
-(ELGs, color-selected, basically anything from DESI).
+(ELGs, color-selected, basically anything from DESI). The average number of galaxies per halo is given by
 
-$$\langle N_\mathrm{cen}\rangle = \frac{f_\mathrm{max}}{2}\left[1 + \mathrm{erf}\!\left(\frac{\log_{10} M - \log_{10} M_\mathrm{min}}{\sigma_{\log M}}\right)\right]$$
+$$\langle N_\mathrm{cen}\rangle = \frac{f_\mathrm{max}}{2}\left[1 + \mathrm{erf}\\left(\frac{\log_{10} M - \log_{10} M_\mathrm{min}}{\sigma_{\log M}}\right)\right]$$
 
-$$\langle N_\mathrm{sat}\rangle = \left(\frac{M}{M_\mathrm{sat}}\right)^\alpha \exp\!\left(-\frac{M_\mathrm{cut}}{M}\right)$$
+$$\langle N_\mathrm{sat}\rangle = \left(\frac{M}{M_\mathrm{sat}}\right)^\alpha \exp\\left(-\frac{M_\mathrm{cut}}{M}\right)$$
 
 Satellites are Poisson-drawn only in halos that already host a central.
 
@@ -84,6 +84,8 @@ miniHOD/hod.py     Python API, buffer management, bisection
 miniHOD/_core.py   ctypes bindings
 tests/             pytest suite
 ```
+
+## Testing
 
 ```bash
 pip install .[test]
