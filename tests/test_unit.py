@@ -307,3 +307,90 @@ def test_halo_idx_satellites_near_host():
     dr -= box * np.round(dr / box)  # periodic
     dist = np.linalg.norm(dr, axis=1)
     assert np.all(dist <= r[idx] * 1.01)  # 1% tolerance for float rounding
+
+
+# ── solve_logMmin (C bisection) ──────────────────────────────────────────────
+
+def test_solve_logMmin_accuracy():
+    """C solver result must produce nbar matching target to <0.1%."""
+    m, p, v, r = make_catalog(N=100_000)
+    box = 500.0
+    model = HOD(m, p, v, r, box_size=box)
+
+    # Use several parameter sets
+    rng = np.random.default_rng(99)
+    for _ in range(5):
+        sigma = rng.uniform(0.2, 0.6)
+        fmax = rng.uniform(0.8, 1.0)
+        logMsat = rng.uniform(13.5, 14.5)
+        logMcut = rng.uniform(12.0, 13.0)
+        alpha = rng.uniform(0.8, 1.4)
+        n_target = model.mean_number_density(13.0, sigma, fmax,
+                                              logMsat, logMcut, alpha) * 0.5
+        lm = model.fix_logMmin(n_target, sigma, fmax, logMsat, logMcut, alpha)
+        n_achieved = model.mean_number_density(lm, sigma, fmax,
+                                                logMsat, logMcut, alpha)
+        assert abs(n_achieved - n_target) / n_target < 0.001, (
+            f"n_achieved={n_achieved:.6e}, n_target={n_target:.6e}"
+        )
+
+
+def test_solve_logMmin_matches_python():
+    """C solver must agree with Python brentq + mean_number_density."""
+    from scipy.optimize import brentq
+
+    m, p, v, r = make_catalog(N=100_000)
+    box = 500.0
+    model = HOD(m, p, v, r, box_size=box)
+
+    kw = dict(sigma_logM=0.5, fmax=0.9, logMsat=13.5, logMcut=11.5, alpha=1.0)
+    n_target = model.mean_number_density(13.0, **kw) * 0.7
+
+    # C solver
+    lm_c = model.fix_logMmin(n_target, **kw)
+
+    # Python fallback
+    def residual(lm):
+        return model.mean_number_density(lm, **kw) - n_target
+    lm_py = brentq(residual, 10.0, 16.0, xtol=1e-4, maxiter=60)
+
+    assert abs(lm_c - lm_py) < 2e-4, f"C={lm_c:.6f}, Python={lm_py:.6f}"
+
+
+def test_n_target_populate_density():
+    """populate(n_target=X) must produce Ngal close to X * V."""
+    m, p, v, r = make_catalog(N=100_000)
+    box = 500.0
+    model = HOD(m, p, v, r, box_size=box)
+    V = box ** 3
+
+    rng = np.random.default_rng(77)
+    for i in range(5):
+        sigma = rng.uniform(0.3, 0.5)
+        fmax = rng.uniform(0.85, 1.0)
+        logMsat = rng.uniform(13.5, 14.0)
+        logMcut = rng.uniform(11.5, 12.5)
+        alpha = rng.uniform(0.9, 1.2)
+        n_target = model.mean_number_density(13.0, sigma, fmax,
+                                              logMsat, logMcut, alpha) * 0.5
+        g = model.populate(n_target=n_target, sigma_logM=sigma, fmax=fmax,
+                           logMsat=logMsat, logMcut=logMcut, alpha=alpha,
+                           seed=100 + i)
+        n_achieved = len(g["pos"]) / V
+        assert abs(n_achieved - n_target) / n_target < 0.10, (
+            f"n_achieved={n_achieved:.4e}, n_target={n_target:.4e}"
+        )
+
+
+def test_n_target_multithreaded_determinism():
+    """populate(n_target=..., nthreads=2) must be deterministic."""
+    m, p, v, r = make_catalog(N=50_000)
+    model = HOD(m, p, v, r, box_size=500.0)
+    kw = dict(n_target=1e-3, sigma_logM=0.5, fmax=1.0,
+              logMsat=13.5, logMcut=11.5, alpha=1.0,
+              seed=42, nthreads=2)
+    g1 = model.populate(**kw)
+    g2 = model.populate(**kw)
+    np.testing.assert_array_equal(g1["pos"], g2["pos"])
+    np.testing.assert_array_equal(g1["vel"], g2["vel"])
+    np.testing.assert_array_equal(g1["is_central"], g2["is_central"])

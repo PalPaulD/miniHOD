@@ -313,6 +313,116 @@ double hod_mean_number_density(
 }
 
 /* =========================================================================
+ * Exported: solve logMmin via bisection with precomputed invariants
+ *
+ * Precomputes log10(M[i]) and sat_prefactor[i] = (M/Msat)^alpha * exp(-Mcut/M)
+ * once, then bisects on logMmin evaluating only the central occupation term.
+ *
+ * Returns solved logMmin, or NAN on failure (bracket doesn't straddle root).
+ * =========================================================================*/
+
+/* Evaluate nbar residual using precomputed arrays */
+static double _nbar_residual(
+    const double *logM, const double *sat_pref, int64_t N,
+    double logMmin, double sigma_logM, double fmax,
+    double target_nbar, double box_volume, int nthreads)
+{
+    double total = 0.0;
+#ifdef _OPENMP
+    int _nt = nthreads > 0 ? nthreads : omp_get_max_threads();
+#   pragma omp parallel for reduction(+:total) schedule(static) num_threads(_nt)
+#endif
+    for (int64_t i = 0; i < N; i++) {
+        double nc = _ncen(logM[i], logMmin, sigma_logM, fmax);
+        total += nc * (1.0 + sat_pref[i]);
+    }
+    return total / box_volume - target_nbar;
+}
+
+double hod_solve_logMmin(
+    const double *masses, int64_t N,
+    double sigma_logM, double fmax,
+    double logMsat, double logMcut, double alpha,
+    double target_nbar, double box_volume,
+    double bracket_lo, double bracket_hi,
+    double xtol, int maxiter,
+    int nthreads)
+{
+    if (N <= 0) return 0.0 / 0.0;  /* NAN */
+
+    double Msat = pow(10.0, logMsat);
+    double Mcut = pow(10.0, logMcut);
+
+    /* Precompute invariants */
+    double *logM     = (double *)malloc(N * sizeof(double));
+    double *sat_pref = (double *)malloc(N * sizeof(double));
+    if (!logM || !sat_pref) {
+        free(logM); free(sat_pref);
+        return 0.0 / 0.0;
+    }
+
+#ifdef _OPENMP
+    int _nt = nthreads > 0 ? nthreads : omp_get_max_threads();
+#   pragma omp parallel for schedule(static) num_threads(_nt)
+#endif
+    for (int64_t i = 0; i < N; i++) {
+        logM[i]     = log10(masses[i]);
+        sat_pref[i] = pow(masses[i] / Msat, alpha) * exp(-Mcut / masses[i]);
+    }
+
+    /* Brent's method (mirrors scipy.optimize.brentq) */
+    double a = bracket_lo, b = bracket_hi;
+    double fa = _nbar_residual(logM, sat_pref, N, a, sigma_logM, fmax,
+                               target_nbar, box_volume, nthreads);
+    double fb = _nbar_residual(logM, sat_pref, N, b, sigma_logM, fmax,
+                               target_nbar, box_volume, nthreads);
+
+    if (fa * fb > 0.0) {
+        free(logM); free(sat_pref);
+        return 0.0 / 0.0;  /* root not bracketed */
+    }
+
+    double c = a, fc = fa, d = b - a, e = d;
+
+    for (int iter = 0; iter < maxiter; iter++) {
+        if (fb * fc > 0.0) { c = a; fc = fa; d = e = b - a; }
+        if (fabs(fc) < fabs(fb)) {
+            a = b; b = c; c = a;
+            fa = fb; fb = fc; fc = fa;
+        }
+
+        double tol = 2.0 * 2.2e-16 * fabs(b) + 0.5 * xtol;
+        double m = 0.5 * (c - b);
+
+        if (fabs(m) <= tol || fb == 0.0) break;
+
+        if (fabs(e) >= tol && fabs(fa) > fabs(fb)) {
+            /* Secant step */
+            double s = fb / fa;
+            double p = 2.0 * m * s;
+            double q = 1.0 - s;
+            if (p > 0.0) q = -q; else p = -p;
+            if (2.0 * p < 3.0 * m * q - fabs(tol * q) &&
+                2.0 * p < fabs(e * q)) {
+                e = d; d = p / q;
+            } else {
+                d = m; e = m;
+            }
+        } else {
+            d = m; e = m;
+        }
+        a = b; fa = fb;
+        if (fabs(d) > tol) b += d;
+        else b += (m > 0.0 ? tol : -tol);
+        fb = _nbar_residual(logM, sat_pref, N, b, sigma_logM, fmax,
+                            target_nbar, box_volume, nthreads);
+    }
+
+    free(logM); free(sat_pref);
+    return b;
+}
+
+/* =========================================================================
  * Exported: populate halos with galaxies
  *
  * Writes galaxy data into caller-allocated output arrays.

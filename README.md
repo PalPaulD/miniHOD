@@ -14,6 +14,8 @@ pip install -e .         # editable, for development
 
 Needs `numpy` and `scipy`. The validation notebook also uses `halotools` and `Corrfunc`.
 
+**Heads up:** Don't run scripts that `import miniHOD` from the folder *above* the cloned repo — Python will find the repo directory instead of the installed package and imports will break.
+
 ## Usage
 
 ```python

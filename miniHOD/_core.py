@@ -67,6 +67,25 @@ lib.hod_mean_number_density.argtypes = [
     ctypes.c_int,       # nthreads (0 = all available)
 ]
 
+# ── hod_solve_logMmin ────────────────────────────────────────────────────
+lib.hod_solve_logMmin.restype  = ctypes.c_double
+lib.hod_solve_logMmin.argtypes = [
+    _DPTR,              # masses      (N,)
+    ctypes.c_int64,     # N
+    ctypes.c_double,    # sigma_logM
+    ctypes.c_double,    # fmax
+    ctypes.c_double,    # logMsat
+    ctypes.c_double,    # logMcut
+    ctypes.c_double,    # alpha
+    ctypes.c_double,    # target_nbar
+    ctypes.c_double,    # box_volume
+    ctypes.c_double,    # bracket_lo
+    ctypes.c_double,    # bracket_hi
+    ctypes.c_double,    # xtol
+    ctypes.c_int,       # maxiter
+    ctypes.c_int,       # nthreads (0 = all available)
+]
+
 # ── Pointer helpers ───────────────────────────────────────────────────────────
 def dptr(arr):
     return arr.ctypes.data_as(_DPTR)

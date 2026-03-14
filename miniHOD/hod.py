@@ -6,7 +6,6 @@ Dependencies: numpy, scipy (for brentq bisection).
 
 import numpy as np
 from collections import namedtuple
-from scipy.optimize import brentq
 from . import _core
 
 
@@ -203,7 +202,8 @@ class HOD:
         """
         Solve for logMmin that matches a target galaxy number density.
 
-        Uses bisection on hod_mean_number_density (no random draws, fast).
+        Uses Brent's method in C with precomputed invariants (no random
+        draws, no Python-C overhead per iteration).
 
         Parameters
         ----------
@@ -215,12 +215,20 @@ class HOD:
         -------
         float — solved logMmin
         """
-        def residual(lm):
-            return self.mean_number_density(
-                lm, sigma_logM, fmax, logMsat, logMcut, alpha,
-                nthreads=nthreads) - n_target
-
-        return brentq(residual, bracket[0], bracket[1], xtol=xtol, maxiter=60)
+        result = _core.lib.hod_solve_logMmin(
+            self._mass_ptr, self._N,
+            sigma_logM, fmax, logMsat, logMcut, alpha,
+            n_target, self._volume,
+            bracket[0], bracket[1],
+            xtol, 60,
+            int(nthreads),
+        )
+        if result != result:  # NaN check
+            raise ValueError(
+                f"Could not solve for logMmin: root not bracketed in "
+                f"[{bracket[0]}, {bracket[1]}] for n_target={n_target:.4e}"
+            )
+        return result
 
     def mean_number_density(self, logMmin, sigma_logM, fmax,
                             logMsat, logMcut, alpha, nthreads=0):
