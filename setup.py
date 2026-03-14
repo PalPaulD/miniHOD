@@ -46,7 +46,7 @@ def _compile_libhod(output_dir):
     out = os.path.join(output_dir, f"libhod.{ext}")
     cc, omp = _find_compiler()
 
-    cmd = [cc, "-O3", "-fPIC", "-std=c11", shflag,
+    cmd = [cc, "-O3", "-march=native", "-fPIC", "-std=c11", shflag,
            "-fno-math-errno", "-fno-trapping-math"]
     if omp:
         cmd.append(omp)

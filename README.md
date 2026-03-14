@@ -8,8 +8,7 @@ About 7-8× faster than halotools on a single thread; scales further with OpenMP
 ## Install
 
 ```bash
-pip install .            # compiles the C backend (needs gcc + OpenMP)
-pip install -e .         # editable, for development
+pip install -e .            # compiles the C backend (needs gcc + OpenMP)
 ```
 
 Needs `numpy` and `scipy`. The validation notebook also uses `halotools` and `Corrfunc`.
