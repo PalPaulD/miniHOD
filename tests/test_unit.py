@@ -232,6 +232,81 @@ def test_invalid_rvir():
         HOD(m, p, v, r, box_size=500.0)
 
 
+# ── Redshift-dependent concentration (Duffy+08) ─────────────────────────────
+
+def test_duffy08_redshift_z0_unchanged():
+    """redshift=0 (default) must produce identical results to old behaviour."""
+    m, p, v, r = make_catalog()
+    model_default = HOD(m, p, v, r, box_size=500.0)
+    model_z0      = HOD(m, p, v, r, box_size=500.0, redshift=0.0)
+    g1 = model_default.populate(**PARAMS, seed=42)
+    g2 = model_z0.populate(**PARAMS, seed=42)
+    np.testing.assert_array_equal(g1["pos"], g2["pos"])
+    np.testing.assert_array_equal(g1["vel"], g2["vel"])
+
+
+def test_duffy08_redshift_lowers_concentration():
+    """Higher redshift must yield lower concentrations (Duffy+08 C < 0)."""
+    c_z0 = HOD._conc_duffy08_200m(np.array([1e13]), redshift=0.0)
+    c_z1 = HOD._conc_duffy08_200m(np.array([1e13]), redshift=1.0)
+    c_z2 = HOD._conc_duffy08_200m(np.array([1e13]), redshift=2.0)
+    assert c_z0 > c_z1 > c_z2, f"Expected c(z=0)>{c_z0} > c(z=1)>{c_z1} > c(z=2)>{c_z2}"
+
+
+def test_duffy08_redshift_scaling():
+    """Verify the (1+z)^{-1.01} scaling factor quantitatively."""
+    masses = np.logspace(11, 15, 50)
+    c_z0 = HOD._conc_duffy08_200m(masses, redshift=0.0)
+    c_z1 = HOD._conc_duffy08_200m(masses, redshift=1.0)
+    ratio = c_z1 / c_z0
+    expected = 2.0 ** (-1.01)
+    np.testing.assert_allclose(ratio, expected, rtol=1e-10,
+        err_msg="c(z=1)/c(z=0) should equal 2^{-1.01}")
+
+
+def test_redshift_affects_satellite_positions():
+    """Higher-z concentrations change satellite radial distribution."""
+    m = np.array([1e14])
+    p = np.array([[250., 250., 250.]])
+    v = np.zeros((1, 3))
+    r = np.array([2.0])
+
+    pop_kw = dict(logMmin=10.0, sigma_logM=0.1, fmax=1.0,
+                  logMsat=11.0, logMcut=8.0, alpha=1.0)
+
+    def mean_sat_radius(redshift):
+        model = HOD(m, p, v, r, box_size=500.0, redshift=redshift)
+        radii = []
+        for seed in range(200):
+            g = model.populate(**pop_kw, seed=seed)
+            sat = ~g["is_central"]
+            if sat.any():
+                dr = g["pos"][sat] - [250., 250., 250.]
+                radii.append(np.linalg.norm(dr, axis=1))
+        return np.concatenate(radii).mean()
+
+    r_z0 = mean_sat_radius(0.0)
+    r_z1 = mean_sat_radius(1.0)
+    # Lower concentration → less centrally concentrated → larger mean radius
+    assert r_z1 > r_z0, (
+        f"Higher z should give larger mean satellite radius: r(z=0)={r_z0:.4f}, r(z=1)={r_z1:.4f}"
+    )
+
+
+def test_explicit_conc_ignores_redshift():
+    """When halo_conc is provided, redshift parameter should have no effect."""
+    m, p, v, r = make_catalog()
+    conc = np.full_like(m, 8.0)
+    model_z0 = HOD(m, p, v, r, box_size=500.0, halo_conc=conc, redshift=0.0)
+    model_z1 = HOD(m, p, v, r, box_size=500.0, halo_conc=conc, redshift=1.0)
+    g1 = model_z0.populate(**PARAMS, seed=42)
+    g2 = model_z1.populate(**PARAMS, seed=42)
+    np.testing.assert_array_equal(g1["pos"], g2["pos"])
+    np.testing.assert_array_equal(g1["vel"], g2["vel"])
+
+
+# ── Parameter validation ─────────────────────────────────────────────────────
+
 def test_validation_sigma_logM():
     m, p, v, r = make_catalog()
     model = HOD(m, p, v, r, box_size=500.0)

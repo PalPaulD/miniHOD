@@ -33,19 +33,24 @@ class HOD:
     halo_radii  : array_like, shape (N,)   [Mpc/h]   — halo radii (R200m)
     box_size    : float  [Mpc/h]  — required for periodic wrapping and fix_logMmin
     halo_conc   : array_like, shape (N,), optional — NFW concentrations (c200m).
-                  If None, computed from Duffy+08 M200m relation (WMAP5, z=0).
+                  If None, computed from Duffy+08 M200m relation (WMAP5).
                   Pass explicitly for Planck cosmology or measured concentrations.
+    redshift    : float, optional — snapshot redshift for the Duffy+08 fallback
+                  c-M relation.  Only used when halo_conc is None.  Default 0.0.
     capacity    : int, optional — initial output buffer size; defaults to 3 * N_halos.
                   Automatically doubled on overflow (amortized, rare after first calls).
     """
 
     @staticmethod
-    def _conc_duffy08_200m(masses):
-        """Default c-M: Duffy+08, M200m, full sample, z=0 (WMAP5)."""
-        return 10.14 * (masses / 2e12) ** (-0.081)
+    def _conc_duffy08_200m(masses, redshift=0.0):
+        """Default c-M: Duffy+08, M200m, full sample (WMAP5).
+        c(M,z) = 10.14 * (M/2e12)^{-0.081} * (1+z)^{-1.01}
+        Valid for z < 2, M in [1e11, 1e15] Msun/h.
+        """
+        return 10.14 * (masses / 2e12) ** (-0.081) * (1.0 + redshift) ** (-1.01)
 
     def __init__(self, halo_masses, halo_pos, halo_vel, halo_radii,
-                 box_size=None, halo_conc=None, capacity=None):
+                 box_size=None, halo_conc=None, redshift=0.0, capacity=None):
         # Force contiguous float64 C-order once — never again during MCMC
         self._mass = np.ascontiguousarray(halo_masses, dtype=np.float64)
         self._pos  = np.ascontiguousarray(halo_pos,    dtype=np.float64)
@@ -55,7 +60,7 @@ class HOD:
 
         if halo_conc is None:
             self._conc = np.ascontiguousarray(
-                self._conc_duffy08_200m(self._mass), dtype=np.float64)
+                self._conc_duffy08_200m(self._mass, redshift), dtype=np.float64)
         else:
             self._conc = np.ascontiguousarray(halo_conc, dtype=np.float64)
 

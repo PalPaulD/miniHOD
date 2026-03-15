@@ -176,19 +176,6 @@ static inline int64_t rng_poisson(double lambda, rng_state *r) {
 }
 
 /* =========================================================================
- * Default concentration-mass relation: Duffy et al. 2008 (M200m, WMAP5, z=0)
- *   c(M) = 10.14 * (M / 2e12 Msun/h)^{-0.081}
- *
- * Used as fallback when caller does not supply per-halo concentrations.
- * For Planck cosmology the normalization is ~15-20% low; callers with
- * simulation catalogs should pass measured concentrations instead.
- * =========================================================================*/
-
-static inline double concentration_duffy08_200m(double M) {
-    return 10.14 * pow(M / 2.0e12, -0.081);
-}
-
-/* =========================================================================
  * NFW rejection sampler
  *
  * Samples x = r/Rvir from p(x) ∝ x / (1 + c*x)^2 on [0, 1].
