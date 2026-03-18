@@ -58,9 +58,9 @@ This is the single most useful extension for samples that don't saturate
 
 $$\langle N_\mathrm{cen}\rangle = \frac{f_\mathrm{max}}{2}\left[1 + \mathrm{erf}\\left(\frac{\log_{10} M - \log_{10} M_\mathrm{min}}{\sigma_{\log M}}\right)\right]$$
 
-$$\langle N_\mathrm{sat}\rangle = \left(\frac{M}{M_\mathrm{sat}}\right)^\alpha \exp\\left(-\frac{M_\mathrm{cut}}{M}\right)$$
+$$\langle N_\mathrm{sat}\rangle = \left(\frac{M}{M_\mathrm{sat}}\right)^\alpha \exp\\left(-\frac{M_\mathrm{cut}}{M}\right) \langle N_\mathrm{cen}\rangle$$
 
-Satellites are Poisson-drawn only in halos that already host a central.
+Satellites are Poisson-drawn ignoring whether centrals are present or not.
 
 Six parameters: `logMmin`, `sigma_logM`, `fmax`, `logMsat`, `logMcut`, `alpha`.
 All masses are **M200m** (the AbacusSummit / DESI convention).
