@@ -212,7 +212,7 @@ static inline double _ncen(double logM, double logMmin,
  * =========================================================================*/
 
 static void write_halo(
-    int64_t i, int64_t g, int64_t n_sat_i,
+    int64_t i, int64_t g, int has_cen, int64_t n_sat_i,
     const double *halo_pos, const double *halo_vel,
     const double *halo_mass, const double *halo_rvir,
     const double *halo_conc,
@@ -221,16 +221,18 @@ static void write_halo(
     int64_t *out_halo_idx,
     rng_state *rng)
 {
-    /* Central: at halo position */
-    out_pos[g*3+0] = wrap(halo_pos[i*3+0], box_size);
-    out_pos[g*3+1] = wrap(halo_pos[i*3+1], box_size);
-    out_pos[g*3+2] = wrap(halo_pos[i*3+2], box_size);
-    out_vel[g*3+0] = halo_vel[i*3+0];
-    out_vel[g*3+1] = halo_vel[i*3+1];
-    out_vel[g*3+2] = halo_vel[i*3+2];
-    out_is_central[g] = 1;
-    out_halo_idx[g] = i;
-    g++;
+    /* Central: at halo position (only if drawn) */
+    if (has_cen) {
+        out_pos[g*3+0] = wrap(halo_pos[i*3+0], box_size);
+        out_pos[g*3+1] = wrap(halo_pos[i*3+1], box_size);
+        out_pos[g*3+2] = wrap(halo_pos[i*3+2], box_size);
+        out_vel[g*3+0] = halo_vel[i*3+0];
+        out_vel[g*3+1] = halo_vel[i*3+1];
+        out_vel[g*3+2] = halo_vel[i*3+2];
+        out_is_central[g] = 1;
+        out_halo_idx[g] = i;
+        g++;
+    }
 
     if (n_sat_i == 0) return;
 
@@ -478,14 +480,9 @@ int64_t hod_populate(
 #       pragma omp for schedule(static)
         for (int64_t i = 0; i < N_halos; i++) {
             double nc_m   = _ncen(log10(halo_mass[i]), logMmin, sigma_logM, fmax);
-            int    has_c  = (rng_double(&rng_occ) < nc_m);
-            n_cen[i]      = has_c;
-            if (has_c) {
-                double ns_m = pow(halo_mass[i] / Msat, alpha) * exp(-Mcut / halo_mass[i]);
-                n_sat[i]    = rng_poisson(ns_m, &rng_occ);
-            } else {
-                n_sat[i] = 0;
-            }
+            n_cen[i]      = (rng_double(&rng_occ) < nc_m);
+            double ns_m   = nc_m * pow(halo_mass[i] / Msat, alpha) * exp(-Mcut / halo_mass[i]);
+            n_sat[i]      = rng_poisson(ns_m, &rng_occ);
         }
     }
 #else
@@ -493,14 +490,9 @@ int64_t hod_populate(
         rng_state rng_occ = { seed, 0.0, 0 };
         for (int64_t i = 0; i < N_halos; i++) {
             double nc_m = _ncen(log10(halo_mass[i]), logMmin, sigma_logM, fmax);
-            int has_c   = (rng_double(&rng_occ) < nc_m);
-            n_cen[i]    = has_c;
-            if (has_c) {
-                double ns_m = pow(halo_mass[i] / Msat, alpha) * exp(-Mcut / halo_mass[i]);
-                n_sat[i]    = rng_poisson(ns_m, &rng_occ);
-            } else {
-                n_sat[i] = 0;
-            }
+            n_cen[i]    = (rng_double(&rng_occ) < nc_m);
+            double ns_m = nc_m * pow(halo_mass[i] / Msat, alpha) * exp(-Mcut / halo_mass[i]);
+            n_sat[i]    = rng_poisson(ns_m, &rng_occ);
         }
     }
 #endif
@@ -534,8 +526,8 @@ int64_t hod_populate(
 
 #       pragma omp for schedule(static)
         for (int64_t i = 0; i < N_halos; i++) {
-            if (n_cen[i] == 0) continue;
-            write_halo(i, offsets[i], n_sat[i],
+            if (n_cen[i] == 0 && n_sat[i] == 0) continue;
+            write_halo(i, offsets[i], (int)n_cen[i], n_sat[i],
                        halo_pos, halo_vel, halo_mass, halo_rvir, halo_conc,
                        box_size, out_pos, out_vel, out_is_central,
                        out_halo_idx, &rng_pos);
@@ -545,8 +537,8 @@ int64_t hod_populate(
     {
         rng_state rng_pos = { seed_pos, 0.0, 0 };
         for (int64_t i = 0; i < N_halos; i++) {
-            if (n_cen[i] == 0) continue;
-            write_halo(i, offsets[i], n_sat[i],
+            if (n_cen[i] == 0 && n_sat[i] == 0) continue;
+            write_halo(i, offsets[i], (int)n_cen[i], n_sat[i],
                        halo_pos, halo_vel, halo_mass, halo_rvir, halo_conc,
                        box_size, out_pos, out_vel, out_is_central,
                        out_halo_idx, &rng_pos);

@@ -104,31 +104,39 @@ def test_periodic_wrap():
         assert np.all(g["pos"] <  box), f"Position >= box at seed={seed+1}"
 
 
-# ── Central–satellite coupling ────────────────────────────────────────────────
+# ── Central–satellite decoupling ──────────────────────────────────────────────
 
 def test_fmax_zero_gives_no_galaxies():
-    """fmax=0 → no centrals → no satellites."""
+    """fmax=0 → <Ncen>=0 → <Nsat>=0 → no galaxies."""
     m, p, v, r = make_catalog()
     model = HOD(m, p, v, r, box_size=500.0)
     g = model.populate(**{**PARAMS, "fmax": 0.0})
     assert len(g["pos"]) == 0
 
 
-def test_no_satellites_without_central():
-    """Every satellite in the output must be preceded by its central."""
-    m, p, v, r = make_catalog()
-    model = HOD(m, p, v, r, box_size=500.0)
-    g = model.populate(**PARAMS, seed=42)
-    ic = g["is_central"]
-    # Walk the output: centrals start a new halo group, satellites follow.
-    # A satellite at index 0 with no prior central is a bug.
-    assert len(ic) > 0
-    assert ic[0], "First galaxy must be a central"
-    for i in range(1, len(ic)):
-        if ic[i]:
-            continue  # new central — ok
-        # satellite: at least one central must have appeared before
-        assert np.any(ic[:i]), f"Satellite at index {i} with no prior central"
+def test_satellites_without_central():
+    """With low fmax, some halos must produce satellites without a central."""
+    # Single massive halo with low fmax → ~70% chance of no central per seed,
+    # but high satellite expectation.  Over 200 seeds, the probability of
+    # never seeing a satellite-only halo is negligible (~0.3^200).
+    M = np.array([1e15])
+    p = np.array([[250., 250., 250.]])
+    v = np.zeros((1, 3))
+    r = np.array([2.0])
+    model = HOD(M, p, v, r, box_size=500.0)
+    pop_kw = dict(logMmin=12.5, sigma_logM=0.5, fmax=0.3,
+                  logMsat=13.0, logMcut=10.0, alpha=1.0)
+
+    found = False
+    for seed in range(200):
+        g = model.populate(**pop_kw, seed=seed)
+        has_cen = g["is_central"].any()
+        has_sat = (~g["is_central"]).any()
+        if has_sat and not has_cen:
+            found = True
+            break
+
+    assert found, "Expected at least one realisation with satellites but no central"
 
 
 # ── Poisson statistics ────────────────────────────────────────────────────────
